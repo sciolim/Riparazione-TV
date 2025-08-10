@@ -1,174 +1,204 @@
-// ====== Storage & Data ======
-const LS_KEY = 'electro-inventory:v1';
-const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+document.addEventListener('DOMContentLoaded', () => {
+    const schedaForm = document.getElementById('schedaForm');
+    const exportCSV = document.getElementById('exportCSV');
+    const exportJSON = document.getElementById('exportJSON');
+    const importJSON = document.getElementById('importJSON');
+    const stampaLista = document.getElementById('stampaLista');
+    const tableBody = document.getElementById('schedaTable').getElementsByTagName('tbody')[0];
+    const jsonViewer = document.getElementById('jsonViewer');
+    const jsonContent = document.getElementById('jsonContent');
+    const closeJsonViewer = document.getElementById('closeJsonViewer');
 
-const SAMPLE = [
-  { id: uid(), name: 'Resistenza 10kΩ', category: 'Resistenze', quantity: 120, drawer: 'A1', value: '10kΩ', package: '0805', notes: 'Pacco nuovo JLC' },
-  { id: uid(), name: 'Condensatore 100nF', category: 'Condensatori', quantity: 85, drawer: 'A2', value: '0.1µF', package: '0603', notes: 'Ceramico X7R' },
-  { id: uid(), name: 'ESP32-WROOM-32', category: 'MCU/Module', quantity: 6, drawer: 'B3', package: 'Module', notes: 'DevKit V1' },
-  { id: uid(), name: 'LED 5mm Rosso', category: 'LED', quantity: 150, drawer: 'C1', value: '2.0V', package: 'THT', notes: 'Diffusi' },
-];
+    // Carica i dati salvati al caricamento della pagina
+    loadSchede();
 
-let items = loadItems();
+    // Aggiungi una nuova scheda
+    schedaForm.addEventListener('submit', (e) => {
+        e.preventDefault();
 
-// ====== Elements ======
-const tbody = document.getElementById('tbody');
-const q = document.getElementById('q');
-const onlyLow = document.getElementById('onlyLow');
-const totalQty = document.getElementById('totalQty');
-const totalItems = document.getElementById('totalItems');
+        const barreLed = document.getElementById('barreLed').value;
+        const quantitaBarreLed = document.getElementById('quantitaBarreLed').value;
+        const flatCable = document.getElementById('flatCable').value;
+        const quantitaFlatCable = document.getElementById('quantitaFlatCable').value;
+        const flatDisplay = document.getElementById('flatDisplay').value;
+        const quantitaFlatDisplay = document.getElementById('quantitaFlatDisplay').value;
 
-// ====== Utils ======
-function loadItems(){
-  try{ const raw = localStorage.getItem(LS_KEY); if(!raw) return SAMPLE; const parsed = JSON.parse(raw); return Array.isArray(parsed)?parsed:SAMPLE; }catch{ return SAMPLE }
-}
-function saveItems(){ localStorage.setItem(LS_KEY, JSON.stringify(items)); }
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])) }
-function ts(){ return new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') }
+        if (barreLed && quantitaBarreLed && flatCable && quantitaFlatCable && flatDisplay && quantitaFlatDisplay) {
+            const scheda = { 
+                barreLed, 
+                quantitaBarreLed, 
+                flatCable, 
+                quantitaFlatCable, 
+                flatDisplay, 
+                quantitaFlatDisplay, 
+                id: Date.now() 
+            };
+            addRowToTable(scheda);
+            saveDataToLocalStorage();
+            schedaForm.reset();
+        }
+    });
 
-// ====== Render ======
-function render(){
-  const term = (q.value||'').trim().toLowerCase();
-  let arr = items.slice();
-  if (term) arr = arr.filter(it => [it.name,it.category,it.drawer,it.value,it.package,it.notes].some(v => (v||'').toLowerCase().includes(term)));
-  if (onlyLow.checked) arr = arr.filter(it => (it.quantity||0) <= 5);
-  arr.sort((a,b)=> (a.drawer||'').localeCompare(b.drawer||'') || (a.name||'').localeCompare(b.name||''));
+    // Esporta in CSV
+    exportCSV.addEventListener('click', () => {
+        const rows = tableBody.querySelectorAll('tr');
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "Barre LED,Quantità Barre LED,Flat Cable,Quantità Flat Cable,Flat Display,Quantità Flat Display\n"; // Intestazione
 
-  tbody.innerHTML = '';
-  for (const it of arr){
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="font-medium">${escapeHtml(it.name||'')}</td>
-      <td>${escapeHtml(it.category||'')}</td>
-      <td class="text-right"><span class="qty ${(+it.quantity||0) <= 5 ? 'low':''}">${it.quantity||0}</span></td>
-      <td><span class="chip">${escapeHtml(it.drawer||'')}</span></td>
-      <td>${escapeHtml(it.value||'')}</td>
-      <td>${escapeHtml(it.package||'')}</td>
-      <td style="max-width:28rem;white-space:pre-wrap">${escapeHtml(it.notes||'')}</td>
-      <td class="actions"><button class="act btn ghost">⋮</button>
-        <div class="menu">
-          <button data-edit>Modifica</button>
-          <button data-del style="color:#b91c1c">Elimina</button>
-        </div>
-      </td>`;
-    tbody.appendChild(tr);
-    const actions = tr.querySelector('.actions');
-    tr.querySelector('.act').addEventListener('click',()=>{ actions.classList.toggle('open') })
-    document.addEventListener('click', (e)=>{ if(!actions.contains(e.target)) actions.classList.remove('open') })
-    tr.querySelector('[data-edit]').addEventListener('click',()=> openDialog(it))
-    tr.querySelector('[data-del]').addEventListener('click',()=> delItem(it.id))
-  }
-  totalQty.textContent = String(arr.reduce((s,i)=>s+(+i.quantity||0),0));
-  totalItems.textContent = String(items.length);
-}
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            const barreLed = cells[0].textContent;
+            const quantitaBarreLed = cells[1].textContent;
+            const flatCable = cells[2].textContent;
+            const quantitaFlatCable = cells[3].textContent;
+            const flatDisplay = cells[4].textContent;
+            const quantitaFlatDisplay = cells[5].textContent;
+            csvContent += `${barreLed},${quantitaBarreLed},${flatCable},${quantitaFlatCable},${flatDisplay},${quantitaFlatDisplay}\n`;
+        });
 
-// ====== CSV helpers ======
-function exportCSV(){
-  const headers = ['id','name','category','quantity','drawer','value','package','notes'];
-  const lines = [headers.join(',')].concat(items.map(it => headers.map(h=>{
-    const val = String(it[h] ?? '').replaceAll('"','""');
-    return (val.includes(',')||val.includes('\n')||val.includes('"')) ? `"${val}"` : val;
-  }).join(',')));
-  download(lines.join('\n'), `archivio-componenti-${ts()}.csv`, 'text/csv;charset=utf-8;');
-}
-function exportJSON(){ download(JSON.stringify(items,null,2), 'archivio-componenti.json', 'application/json'); }
-function download(text, name, type){ const blob = new Blob([text],{type}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
-function parseCSV(text){
-  const rows=[]; let i=0, cur='', inQ=false, row=[]; while(i<=text.length){
-    const ch = text[i] ?? '\n';
-    if (inQ){ if (ch==='"' && text[i+1]==='"'){ cur+='"'; i++; } else if (ch==='"'){ inQ=false; } else { cur+=ch } }
-    else { if (ch==='"') inQ=true; else if (ch===','){ row.push(cur); cur=''; } else if (ch==='\n' || i===text.length){ row.push(cur); rows.push(row); row=[]; cur=''; } else { cur+=ch } }
-    i++;
-  } return rows;
-}
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', 'schede_tv.csv');
+        document.body.appendChild(link);
+        link.click();
+    });
 
-// ====== CRUD ======
-function delItem(id){ items = items.filter(x => x.id !== id); saveItems(); render(); }
-function upsertItem(data){
-  const idx = items.findIndex(x => x.id === data.id);
-  if (idx === -1) items.push(data); else items[idx] = data;
-  saveItems(); render();
-}
+    // Esporta in JSON
+    exportJSON.addEventListener('click', () => {
+        const schede = JSON.parse(localStorage.getItem('schedeTV')) || [];
+        const jsonContentString = JSON.stringify(schede, null, 2);
 
-// ====== Dialog ======
-const dlg = document.getElementById('dlg');
-const dlgTitle = document.getElementById('dlgTitle');
-const frm = document.getElementById('frm');
-const f = id => document.getElementById(id);
+        if (/Android/i.test(navigator.userAgent)) {
+            // Su Android: mostra i dati JSON in una finestra di testo
+            jsonContent.value = jsonContentString;
+            jsonViewer.classList.remove('hidden');
+        } else {
+            // Su desktop: scarica il file JSON
+            const blob = new Blob([jsonContentString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
 
-function openDialog(initial){
-  dlgTitle.textContent = initial ? 'Modifica componente' : 'Nuovo componente';
-  f('f_id').value = initial?.id || uid();
-  f('f_name').value = initial?.name || '';
-  f('f_category').value = initial?.category || '';
-  f('f_quantity').value = initial?.quantity ?? 0;
-  f('f_drawer').value = initial?.drawer || '';
-  f('f_value').value = initial?.value || '';
-  f('f_package').value = initial?.package || '';
-  f('f_notes').value = initial?.notes || '';
-  dlg.showModal();
-}
-document.getElementById('dlgClose').addEventListener('click', ()=> dlg.close());
-document.getElementById('dlgSave').addEventListener('click', (e)=>{
-  e.preventDefault();
-  if (!f('f_name').value.trim()) { alert('Inserisci un nome'); return; }
-  const data = {
-    id: f('f_id').value,
-    name: f('f_name').value,
-    category: f('f_category').value,
-    quantity: Number(f('f_quantity').value||0),
-    drawer: f('f_drawer').value,
-    value: f('f_value').value,
-    package: f('f_package').value,
-    notes: f('f_notes').value,
-  };
-  upsertItem(data); dlg.close();
-});
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'schede_tv.json';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+    });
 
-// ====== Topbar actions ======
-document.getElementById('btnNew').addEventListener('click', ()=> openDialog(null));
-document.getElementById('btnImport').addEventListener('click', ()=> document.getElementById('fileImport').click());
-document.getElementById('btnExportCSV').addEventListener('click', exportCSV);
-document.getElementById('btnPrint').addEventListener('click', ()=> window.print());
+    // Chiudi la finestra di testo JSON
+    closeJsonViewer.addEventListener('click', () => {
+        jsonViewer.classList.add('hidden');
+    });
 
-// Reset & Clear
-document.getElementById('btnReset').addEventListener('click', ()=> { q.value=''; onlyLow.checked=false; render(); });
-document.getElementById('btnClear').addEventListener('click', ()=> { if (confirm("Svuotare completamente l'archivio?")) { items=[]; saveItems(); render(); } });
+    // Importa da JSON
+    importJSON.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
 
-// ====== Import ======
-const fileImport = document.getElementById('fileImport');
-fileImport.addEventListener('change', (e)=>{
-  const file = e.target.files && e.target.files[0]; if(!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    const text = String(reader.result || '');
-    if (file.name.endsWith('.json')){
-      try{ const data = JSON.parse(text); if(Array.isArray(data)) { items = data; saveItems(); render(); } }catch{}
-    } else {
-      const rows = parseCSV(text);
-      if (!rows.length) return;
-      const headers = rows[0].map(h=>h.trim());
-      const idx = h => headers.indexOf(h);
-      const list = rows.slice(1).filter(r => r.length>=2 && r.some(x=>x && String(x).trim())).map(r=>({
-        id: r[idx('id')] || uid(),
-        name: r[idx('name')] || '',
-        category: r[idx('category')] || '',
-        quantity: Number(r[idx('quantity')] || 0),
-        drawer: r[idx('drawer')] || '',
-        value: r[idx('value')] || '',
-        package: r[idx('package')] || '',
-        notes: r[idx('notes')] || '',
-      }));
-      items = list; saveItems(); render();
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+
+            reader.onload = (event) => {
+                const schede = JSON.parse(event.target.result);
+                localStorage.setItem('schedeTV', JSON.stringify(schede));
+                tableBody.innerHTML = ''; // Svuota la tabella
+                schede.forEach(scheda => addRowToTable(scheda));
+                alert('Dati importati con successo!');
+            };
+
+            reader.readAsText(file);
+        };
+
+        input.click();
+    });
+
+    // Stampa la lista
+    stampaLista.addEventListener('click', () => {
+        window.print();
+    });
+
+    // Modifica o elimina una scheda
+    tableBody.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.classList.contains('edit')) {
+            editRow(target);
+        } else if (target.classList.contains('delete')) {
+            deleteRow(target);
+        }
+    });
+
+    // Funzioni di supporto
+    function addRowToTable(scheda) {
+        const newRow = document.createElement('tr');
+        newRow.innerHTML = `
+            <td>${scheda.barreLed}</td>
+            <td>${scheda.quantitaBarreLed}</td>
+            <td>${scheda.flatCable}</td>
+            <td>${scheda.quantitaFlatCable}</td>
+            <td>${scheda.flatDisplay}</td>
+            <td>${scheda.quantitaFlatDisplay}</td>
+            <td class="actions">
+                <button class="edit" data-id="${scheda.id}">Modifica</button>
+                <button class="delete" data-id="${scheda.id}">Elimina</button>
+            </td>
+        `;
+        tableBody.appendChild(newRow);
     }
-  };
-  reader.readAsText(file);
-  e.target.value = '';
+
+    function editRow(button) {
+        const row = button.closest('tr');
+        const cells = row.querySelectorAll('td');
+        const barreLed = cells[0].textContent;
+        const quantitaBarreLed = cells[1].textContent;
+        const flatCable = cells[2].textContent;
+        const quantitaFlatCable = cells[3].textContent;
+        const flatDisplay = cells[4].textContent;
+        const quantitaFlatDisplay = cells[5].textContent;
+
+        document.getElementById('barreLed').value = barreLed;
+        document.getElementById('quantitaBarreLed').value = quantitaBarreLed;
+        document.getElementById('flatCable').value = flatCable;
+        document.getElementById('quantitaFlatCable').value = quantitaFlatCable;
+        document.getElementById('flatDisplay').value = flatDisplay;
+        document.getElementById('quantitaFlatDisplay').value = quantitaFlatDisplay;
+
+        row.remove();
+        saveDataToLocalStorage();
+    }
+
+    function deleteRow(button) {
+        if (confirm('Sei sicuro di voler eliminare questa scheda?')) {
+            const row = button.closest('tr');
+            row.remove();
+            saveDataToLocalStorage();
+        }
+    }
+
+    function saveDataToLocalStorage() {
+        const rows = tableBody.querySelectorAll('tr');
+        const schede = [];
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            schede.push({
+                barreLed: cells[0].textContent,
+                quantitaBarreLed: cells[1].textContent,
+                flatCable: cells[2].textContent,
+                quantitaFlatCable: cells[3].textContent,
+                flatDisplay: cells[4].textContent,
+                quantitaFlatDisplay: cells[5].textContent,
+                id: row.querySelector('.edit').dataset.id
+            });
+        });
+        localStorage.setItem('schedeTV', JSON.stringify(schede));
+    }
+
+    function loadSchede() {
+        const schede = JSON.parse(localStorage.getItem('schedeTV')) || [];
+        schede.forEach(scheda => addRowToTable(scheda));
+    }
 });
-
-// ====== Filters ======
-q.addEventListener('input', render);
-onlyLow.addEventListener('change', render);
-
-// ====== First render ======
-render();
